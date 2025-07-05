@@ -1,7 +1,6 @@
 # SnakeID
-
+![image](https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=ios&logoColor=white)
 SnakeID is an iOS application built with SwiftUI that leverages OpenAI's GPT-4o to identify snakes from images. It analyzes an image, even if partially visible or blurred, and returns a JSON result containing the common name, scientific name, venomous status, safety advice, and emergency guidance.
-\n ![image](https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=ios&logoColor=white)
 
 ## Requirements
 
