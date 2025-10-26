@@ -1,302 +1,389 @@
 import { useState, useRef } from 'react'
 import Head from 'next/head'
-import { Button } from '@/components/ui/button'
-import { Upload, Camera, Loader2, AlertTriangle, Shield, ShieldCheck, RotateCcw } from 'lucide-react'
+import { Camera, Phone, ArrowRight, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
 
 interface SnakeResult {
-  status: string
-  description: string
+  commonName: string
+  scientificName: string
+  isVenomous: boolean
+  whatToDo: string
+  whatNotToDo: string
+  description?: string
 }
 
 export default function Home() {
   const [image, setImage] = useState<string | null>(null)
   const [result, setResult] = useState<SnakeResult | null>(null)
   const [loading, setLoading] = useState(false)
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
-  const [showCamera, setShowCamera] = useState(false)
-  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
       reader.onload = (e) => {
-        setImage(e.target?.result as string)
-        identifySnake(e.target?.result as string)
+        const imageData = e.target?.result as string
+        setImage(imageData)
+        identifySnake(imageData)
       }
       reader.readAsDataURL(file)
     }
   }
 
+  const parseAIResponse = (description: string): SnakeResult => {
+    // Try to extract structured information from the AI response
+    const lines = description.split('\n').filter(line => line.trim())
+
+    let commonName = 'Unknown Snake'
+    let scientificName = 'Species unknown'
+    let isVenomous = false
+    let whatToDo = '• Keep a safe distance\n• Observe calmly\n• Contact wildlife professionals if needed'
+    let whatNotToDo = '• Don\'t approach the snake\n• Don\'t attempt to handle it\n• Don\'t make sudden movements'
+
+    // Look for venomous indicators
+    const venomousKeywords = ['venomous', 'dangerous', 'toxic', 'poisonous', 'rattlesnake', 'cobra', 'viper', 'mamba']
+    const descLower = description.toLowerCase()
+    isVenomous = venomousKeywords.some(keyword => descLower.includes(keyword))
+
+    // Try to extract species name from first line or look for capitalized words
+    for (const line of lines) {
+      if (line.includes('(') && line.includes(')')) {
+        // Likely contains scientific name in parentheses
+        const match = line.match(/([^(]+)\(([^)]+)\)/)
+        if (match) {
+          commonName = match[1].trim()
+          scientificName = match[2].trim()
+          break
+        }
+      }
+    }
+
+    // If still unknown, use first substantial line as common name
+    if (commonName === 'Unknown Snake' && lines.length > 0) {
+      const firstLine = lines[0].replace(/^(species|snake|identified as):/i, '').trim()
+      if (firstLine.length > 3) {
+        commonName = firstLine
+      }
+    }
+
+    // Customize advice based on venomous status
+    if (isVenomous) {
+      whatToDo = '• Back away slowly and calmly\n• Maintain a safe distance (at least 6 feet)\n• Contact emergency services if bitten\n• Remember the snake\'s appearance for medical treatment'
+      whatNotToDo = '• Don\'t attempt to catch or kill the snake\n• Don\'t get close to take photos\n• Don\'t make sudden movements\n• Don\'t try to suck out venom if bitten'
+    } else {
+      whatToDo = '• Observe from a safe distance\n• Allow the snake to move away naturally\n• Take photos from a distance if desired\n• Appreciate this wildlife encounter'
+      whatNotToDo = '• Don\'t attempt to handle the snake\n• Don\'t corner or provoke it\n• Don\'t assume all non-venomous snakes are safe to touch'
+    }
+
+    return {
+      commonName,
+      scientificName,
+      isVenomous,
+      whatToDo,
+      whatNotToDo,
+      description
+    }
+  }
+
   const identifySnake = async (imageData: string) => {
     setLoading(true)
+    setError(null)
     try {
       const response = await fetch('https://42znlandtww7wnpuarx5dy2rt40kajds.lambda-url.us-east-1.on.aws/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageData.split(',')[1] })
       })
-      
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze image')
+      }
+
       const data = await response.json()
-      setResult({
-        status: data.status || 'Unknown',
-        description: data.description || 'Unable to identify snake'
-      })
+      const parsedResult = parseAIResponse(data.description || data.status || 'Unable to identify snake')
+      setResult(parsedResult)
     } catch (error) {
-      setResult({
-        status: 'Unknown',
-        description: 'Error identifying snake. Please try again.'
-      })
+      setError('Failed to analyze image. Please try again.')
+      setResult(null)
     }
     setLoading(false)
   }
 
-  const getStatusDisplay = (status: string) => {
-    switch (status) {
-      case 'Venomous':
-        return { backgroundColor: '#8b0000', textColor: '#ffffff', icon: AlertTriangle }
-      case 'Mildly Venomous':
-        return { backgroundColor: '#ffd700', textColor: '#000000', icon: Shield }
-      case 'Not Venomous':
-        return { backgroundColor: '#228b22', textColor: '#000000', icon: ShieldCheck }
-      default:
-        return { backgroundColor: '#6b7280', textColor: '#ffffff', icon: Shield }
-    }
-  }
-
-  const triggerCamera = () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: facingMode }
-      })
-        .then(mediaStream => {
-          setStream(mediaStream)
-          setShowCamera(true)
-          // Use setTimeout to ensure video element is rendered
-          setTimeout(() => {
-            if (videoRef.current) {
-              videoRef.current.srcObject = mediaStream
-              videoRef.current.play()
-            }
-          }, 100)
-        })
-        .catch(() => {
-          fileInputRef.current?.click()
-        })
-    } else {
-      fileInputRef.current?.click()
-    }
-  }
-
-  const capturePhoto = () => {
-    if (videoRef.current && stream) {
-      const canvas = document.createElement('canvas')
-      canvas.width = videoRef.current.videoWidth
-      canvas.height = videoRef.current.videoHeight
-      const ctx = canvas.getContext('2d')
-      
-      ctx?.drawImage(videoRef.current, 0, 0)
-      const imageData = canvas.toDataURL('image/jpeg')
-      setImage(imageData)
-      identifySnake(imageData)
-      
-      // Stop camera and hide preview
-      stream.getTracks().forEach(track => track.stop())
-      setStream(null)
-      setShowCamera(false)
-    }
-  }
-
-  const flipCamera = () => {
-    const newFacingMode = facingMode === 'user' ? 'environment' : 'user'
-    setFacingMode(newFacingMode)
-    
-    // If camera is currently active, restart with new facing mode
-    if (stream && showCamera) {
-      stream.getTracks().forEach(track => track.stop())
-      
-      navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: newFacingMode }
-      })
-        .then(mediaStream => {
-          setStream(mediaStream)
-          setTimeout(() => {
-            if (videoRef.current) {
-              videoRef.current.srcObject = mediaStream
-              videoRef.current.play()
-            }
-          }, 100)
-        })
-        .catch(() => {
-          setShowCamera(false)
-          setStream(null)
-        })
-    }
-  }
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop())
-      setStream(null)
-      setShowCamera(false)
-    }
-  }
-
-  const uploadNewImage = () => {
+  const handleBackToHome = () => {
     setImage(null)
     setResult(null)
-    setLoading(false)
-    fileInputRef.current?.click()
+    setError(null)
   }
 
-  const statusDisplay = result ? getStatusDisplay(result.status) : null
+  const handleCall = (number: string) => {
+    window.location.href = `tel:${number}`
+  }
 
-  return (
-    <>
-      <Head>
-        <title>All about Snakes</title>
-        <meta name="description" content="Learn about snake species using AI" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Head>
+  // Home Screen
+  if (!image && !result) {
+    return (
+      <>
+        <Head>
+          <title>SnakeID - AI Snake Identification</title>
+          <meta name="description" content="AI-Powered Snake Identification" />
+          <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+          <meta name="theme-color" content="#34C759" />
+        </Head>
 
-      <div className="min-h-screen p-4" style={{background: 'linear-gradient(to bottom right, #166534, #059669, #d97706)'}}>
-        <div className="max-w-sm mx-auto space-y-6">
-          
-          {/* Header */}
-          <div className="text-center py-6">
-            <h1 className="text-3xl font-bold text-white mb-2">All about Snakes</h1>
-            <p className="text-white opacity-90">Discover and learn about snake species</p>
+        <div
+          className="min-h-screen flex flex-col"
+          style={{
+            background: 'linear-gradient(135deg, rgba(52, 199, 89, 0.1) 0%, rgba(0, 122, 255, 0.05) 100%)'
+          }}
+        >
+          {/* Flexible spacer */}
+          <div className="flex-grow" />
+
+          {/* Hero Section */}
+          <div className="text-center px-8">
+            <div className="text-[80px] leading-none mb-[10px]">🐍</div>
+            <h1 className="text-[42px] font-black mb-3 tracking-tight" style={{ color: 'var(--text-primary)' }}>
+              SnakeID
+            </h1>
+            <p className="text-lg font-medium mb-10" style={{ color: 'var(--text-secondary)' }}>
+              AI-Powered Snake Identification
+            </p>
           </div>
 
-          {/* Camera Upload Button - Always Visible */}
-          <div className="flex justify-center items-center gap-4 mb-6">
-            <div 
-              onClick={triggerCamera}
-              className="rounded-full cursor-pointer hover:opacity-80 transition-all shadow-lg"
+          {/* Feature Card */}
+          <div className="mx-[30px] mb-8 animate-fade-in-up">
+            <div
+              className="bg-white p-[25px] rounded-[20px]"
+              style={{ boxShadow: '0 5px 10px var(--shadow-default)' }}
+            >
+              <div className="space-y-5">
+                <div className="text-base font-semibold flex items-center gap-2">
+                  <span>📸</span>
+                  <span>Instant Species Identification</span>
+                </div>
+                <div className="text-base font-semibold flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>Emergency Safety Guidance</span>
+                </div>
+                <div className="text-base font-semibold flex items-center gap-2">
+                  <span>🚨</span>
+                  <span>Quick Emergency Contacts</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Flexible spacer */}
+          <div className="flex-grow" />
+
+          {/* Main CTA Button */}
+          <div className="mx-[30px] mb-[50px]">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-4 py-5 px-6 text-white text-[22px] font-bold rounded-2xl transition-transform active:scale-[0.98] hover:scale-[1.02]"
               style={{
-                background: 'linear-gradient(to right, #15803d, #d97706)',
-                padding: '40px'
+                background: 'linear-gradient(90deg, #34C759 0%, rgba(52, 199, 89, 0.8) 100%)',
+                boxShadow: '0 4px 8px var(--primary-green-medium)'
               }}
             >
-              <Camera style={{height: '80px', width: '80px', color: 'white'}} />
-            </div>
-            
-            <div 
-              onClick={flipCamera}
-              className="rounded-full cursor-pointer hover:opacity-80 transition-all shadow-lg bg-white/20 backdrop-blur-sm p-3"
-            >
-              <RotateCcw style={{height: '24px', width: '24px', color: 'white'}} />
-            </div>
+              <Camera size={24} />
+              <span>Identify Snake</span>
+            </button>
           </div>
-          
-          {/* Upload Area, Camera Preview, or Image Display */}
-          {showCamera ? (
-            <div className="space-y-4">
-              <div className="relative bg-black rounded-xl overflow-hidden">
-                <video 
-                  ref={videoRef}
-                  autoPlay 
-                  playsInline
-                  muted
-                  className="w-full h-64 object-cover"
-                  onLoadedMetadata={() => {
-                    if (videoRef.current) {
-                      videoRef.current.play()
-                    }
-                  }}
-                />
-              </div>
-              <div className="flex justify-center gap-4">
-                <div 
-                  onClick={capturePhoto}
-                  className="rounded-full cursor-pointer hover:opacity-90 transition-all shadow-lg flex flex-col items-center justify-center"
-                  style={{
-                    background: 'linear-gradient(to right, #15803d, #d97706)',
-                    padding: '20px',
-                    minWidth: '120px',
-                    minHeight: '80px'
-                  }}
-                >
-                  <Camera style={{height: '32px', width: '32px', color: 'white'}} />
-                  <span className="text-white text-sm font-semibold mt-1">Take Picture</span>
-                </div>
-                <Button 
-                  onClick={stopCamera}
-                  variant="outline"
-                  className="px-6 py-3 rounded-full bg-white/90 hover:bg-white"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : !image ? (
-            <div 
-              onClick={triggerCamera}
-              className="bg-white/90 backdrop-blur-sm border-2 border-dashed rounded-xl p-8 text-center cursor-pointer hover:bg-white transition-all shadow-lg"
-              style={{borderColor: '#22c55e'}}
-            >
-              <p className="text-gray-700 font-semibold text-lg">Tap anywhere to take photo or upload image</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="w-32 h-32 mx-auto rounded-xl overflow-hidden border-4 border-white shadow-lg bg-white">
-                <img 
-                  src={image} 
-                  alt="Snake" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              
-              {loading && (
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg">
-                  <div className="flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin text-green-700" />
-                    <span className="ml-3 text-gray-700 font-medium">Analyzing snake...</span>
-                  </div>
-                </div>
-              )}
-              
-              {result && !loading && (
-                <div className="space-y-4">
-                  {/* Status Badge */}
-                  {statusDisplay && (
-                    <div className="flex justify-center">
-                      <div 
-                        className="px-6 py-3 rounded-full flex items-center gap-2 font-bold text-lg shadow-lg blink-animation"
-                        style={{
-                          backgroundColor: statusDisplay.backgroundColor, 
-                          color: statusDisplay.textColor
-                        }}
-                      >
-                        <statusDisplay.icon className="h-5 w-5" />
-                        {result.status}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Description */}
-                  <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 shadow-lg border border-white/50">
-                    <div className="bg-gradient-to-r from-green-50 to-amber-50 rounded-lg p-4 border border-green-300">
-                      <p className="text-gray-800 leading-relaxed text-sm">
-                        {result.description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+
+          {/* Disclaimer */}
+          <div className="text-center px-8 pb-[30px]">
+            <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+              ⚠️ For emergencies, always call 911 first
+            </p>
+          </div>
 
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             onChange={handleImageUpload}
             className="hidden"
           />
         </div>
+      </>
+    )
+  }
+
+  // Results Screen
+  return (
+    <>
+      <Head>
+        <title>Analysis Result - SnakeID</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#34C759" />
+      </Head>
+
+      <div
+        className="min-h-screen overflow-y-auto animate-slide-in"
+        style={{
+          background: 'linear-gradient(135deg, rgba(52, 199, 89, 0.05) 0%, rgba(0, 122, 255, 0.05) 100%)'
+        }}
+      >
+        {/* Navigation Bar */}
+        <div className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-gray-200 z-10">
+          <div className="flex items-center h-11 px-4">
+            <button
+              onClick={handleBackToHome}
+              className="text-[#007AFF] text-[17px] font-semibold flex items-center gap-1"
+            >
+              <span className="text-xl">‹</span>
+              <span>Back</span>
+            </button>
+            <div className="flex-grow text-center">
+              <h2 className="text-[17px] font-semibold">Analysis Result</h2>
+            </div>
+            <div className="w-16" /> {/* Spacer for centering */}
+          </div>
+        </div>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in" style={{ background: 'var(--overlay-dark)' }}>
+            <div className="flex flex-col items-center gap-5 p-8 rounded-2xl" style={{ background: 'var(--overlay-darker)' }}>
+              <div className="w-10 h-10 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+              <p className="text-white text-[17px] font-semibold">Analyzing Snake...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="p-5 m-5 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-red-800 text-center">{error}</p>
+            <button
+              onClick={handleBackToHome}
+              className="mt-4 w-full py-3 bg-red-600 text-white rounded-lg font-semibold"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {/* Snake Photo */}
+        {image && (
+          <div className="px-5 pt-5 pb-5">
+            <img
+              src={image}
+              alt="Snake"
+              className="w-full max-h-[300px] object-contain rounded-2xl"
+              style={{ boxShadow: '0 5px 10px var(--shadow-medium)' }}
+            />
+          </div>
+        )}
+
+        {/* Results Content */}
+        {result && !loading && (
+          <div className="px-5 space-y-5 pb-10 animate-fade-in-up">
+            {/* Species Names */}
+            <div className="text-center">
+              <h1 className="text-[28px] font-bold leading-tight mb-4" style={{ color: 'var(--text-primary)' }}>
+                {result.commonName}
+              </h1>
+              <p className="scientific-name text-base font-medium mb-5" style={{ color: 'var(--text-secondary)' }}>
+                {result.scientificName}
+              </p>
+            </div>
+
+            {/* Safety Status Card */}
+            <div
+              className="flex gap-4 p-4 rounded-xl border"
+              style={{
+                background: result.isVenomous ? 'var(--danger-red-light)' : 'var(--primary-green-light)',
+                borderColor: result.isVenomous ? 'var(--danger-red-medium)' : 'var(--primary-green-medium)'
+              }}
+            >
+              <div className="flex-shrink-0">
+                {result.isVenomous ? (
+                  <AlertTriangle size={24} style={{ color: 'var(--danger-red)' }} />
+                ) : (
+                  <CheckCircle size={24} style={{ color: 'var(--primary-green)' }} />
+                )}
+              </div>
+              <div>
+                <div
+                  className="text-lg font-bold mb-1"
+                  style={{ color: result.isVenomous ? 'var(--danger-red)' : 'var(--primary-green)' }}
+                >
+                  {result.isVenomous ? 'VENOMOUS' : 'NON-VENOMOUS'}
+                </div>
+                <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {result.isVenomous ? 'Handle with extreme caution' : 'Generally safe to observe'}
+                </div>
+              </div>
+            </div>
+
+            {/* What To Do Section */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle size={20} style={{ color: 'var(--primary-green)' }} />
+                <h3 className="text-lg font-bold">What To Do</h3>
+              </div>
+              <div
+                className="p-3 rounded-lg whitespace-pre-line"
+                style={{ background: 'var(--primary-green-light)' }}
+              >
+                <p className="text-base leading-relaxed">{result.whatToDo}</p>
+              </div>
+            </div>
+
+            {/* What NOT To Do Section */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <XCircle size={20} style={{ color: 'var(--danger-red)' }} />
+                <h3 className="text-lg font-bold">What NOT To Do</h3>
+              </div>
+              <div
+                className="p-3 rounded-lg whitespace-pre-line"
+                style={{ background: 'var(--danger-red-light)' }}
+              >
+                <p className="text-base leading-relaxed">{result.whatNotToDo}</p>
+              </div>
+            </div>
+
+            {/* Emergency Contacts Section */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Phone size={20} style={{ color: 'var(--primary-blue)' }} />
+                <h3 className="text-lg font-bold">Emergency Contacts</h3>
+              </div>
+              <div className="space-y-3">
+                {/* 911 Button */}
+                <button
+                  onClick={() => handleCall('911')}
+                  className="w-full flex items-center justify-between p-4 rounded-lg text-white font-semibold transition-transform active:scale-[0.98]"
+                  style={{ background: 'var(--danger-red)' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Phone size={16} />
+                    <span>Call 911 (Emergency)</span>
+                  </div>
+                  <ArrowRight size={14} />
+                </button>
+
+                {/* Poison Control Button */}
+                <button
+                  onClick={() => handleCall('1-800-222-1222')}
+                  className="w-full flex items-center justify-between p-4 rounded-lg text-white font-semibold transition-transform active:scale-[0.98]"
+                  style={{ background: 'var(--warning-orange)' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Phone size={16} />
+                    <span>Poison Control Center</span>
+                  </div>
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
