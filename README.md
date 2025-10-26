@@ -1,10 +1,11 @@
-# Snake Identifier PWA
+
+# SnakeID
 
 A Progressive Web App that identifies snakes using AI-powered computer vision to help users determine if a snake is venomous or not.
 
 ## 🐍 Overview
 
-The Snake Identifier PWA allows users to take photos of snakes and receive instant AI-powered identification with safety information. The app determines whether a snake is venomous, mildly venomous, or not venomous, providing detailed descriptions to help users make informed decisions about snake encounters.
+SnakeID allows users to take photos of snakes and receive instant AI-powered identification with safety information. The app determines whether a snake is venomous, mildly venomous, or not venomous, providing detailed descriptions to help users make informed decisions about snake encounters.
 
 ## 🏗️ Architecture
 
@@ -31,7 +32,7 @@ The Snake Identifier PWA allows users to take photos of snakes and receive insta
 ## 📁 Project Structure
 
 ```
-snake-identifier-pwa/
+SnakeID/
 ├── frontend/
 │   ├── pages/
 │   │   ├── index.tsx          # Main application page
