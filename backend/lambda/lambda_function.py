@@ -1,17 +1,17 @@
 import json
 import base64
 import os
-from openai import OpenAI
+import boto3
 
 def lambda_handler(event, context):
     try:
-        # Initialize OpenAI client
-        client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
-        
+        # Initialize Bedrock client
+        bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+
         # Parse the request body
         body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
         image_data = body['image']
-        
+
         # Create the prompt for snake identification
         prompt = """Analyze this image of a snake and provide:
 1. Species identification (if possible)
@@ -21,28 +21,41 @@ def lambda_handler(event, context):
 
 Format your response as JSON with 'status' and 'description' fields."""
 
-        # Call OpenAI Vision API
-        response = client.chat.completions.create(
-            model="gpt-4-vision-preview",
-            messages=[
+        # Use AWS Bedrock with Claude 3 Haiku (cheapest multimodal model)
+        # Note: Llama models don't support image analysis, so using Claude 3 Haiku for cost-effectiveness
+        request_body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 500,
+            "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": prompt},
                         {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_data}"
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_data
                             }
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
                         }
                     ]
                 }
-            ],
-            max_tokens=500
+            ]
+        }
+
+        # Call Bedrock API
+        response = bedrock.invoke_model(
+            modelId="anthropic.claude-3-haiku-20240307-v1:0",
+            body=json.dumps(request_body)
         )
-        
+
         # Parse the response
-        ai_response = response.choices[0].message.content
+        response_body = json.loads(response['body'].read())
+        ai_response = response_body['content'][0]['text']
         
         # Try to extract JSON from response
         try:

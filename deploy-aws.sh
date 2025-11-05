@@ -10,14 +10,14 @@ if [ -f .env ]; then
     export $(cat .env | grep -v '^#' | xargs)
 else
     echo "❌ Error: .env file not found"
-    echo "Please create a .env file with your AWS credentials and OpenAI API key"
+    echo "Please create a .env file with your AWS credentials"
     exit 1
 fi
 
 # Verify required variables
-if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$OPENAI_API_KEY" ]; then
+if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
     echo "❌ Error: Required environment variables not set"
-    echo "Please ensure .env contains AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and OPENAI_API_KEY"
+    echo "Please ensure .env contains AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
     exit 1
 fi
 
@@ -65,6 +65,28 @@ EOF
         --role-name $ROLE_NAME \
         --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
+    # Create and attach Bedrock invoke policy
+    cat > /tmp/bedrock-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+
+    aws iam put-role-policy \
+        --role-name $ROLE_NAME \
+        --policy-name BedrockInvokePolicy \
+        --policy-document file:///tmp/bedrock-policy.json
+
     echo "Waiting 10 seconds for IAM role to propagate..."
     sleep 10
 else
@@ -95,7 +117,7 @@ if aws lambda get-function --function-name ${LAMBDA_FUNCTION_NAME} 2>/dev/null; 
 
     aws lambda update-function-configuration \
         --function-name ${LAMBDA_FUNCTION_NAME} \
-        --environment Variables="{OPENAI_API_KEY=$OPENAI_API_KEY}"
+        --environment Variables="{AWS_REGION=$AWS_DEFAULT_REGION}"
 else
     echo "Creating new Lambda function..."
     aws lambda create-function \
@@ -106,7 +128,7 @@ else
         --zip-file fileb://backend/snake-identifier-lambda.zip \
         --timeout 30 \
         --memory-size 512 \
-        --environment Variables="{OPENAI_API_KEY=$OPENAI_API_KEY}"
+        --environment Variables="{AWS_REGION=$AWS_DEFAULT_REGION}"
 
     echo "Waiting for Lambda function to be ready..."
     sleep 5
