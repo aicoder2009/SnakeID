@@ -160,10 +160,10 @@ cd frontend
 # Or manual deployment
 cd frontend
 npm run build
-aws s3 sync out/ s3://snake-identifier-pwa-1761012570 --delete
+aws s3 sync out/ s3://$S3_BUCKET_NAME --delete
 
 # Invalidate CloudFront cache for immediate updates
-aws cloudfront create-invalidation --distribution-id ENM5YUS3HN3KM --paths "/*"
+aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DISTRIBUTION_ID --paths "/*"
 ```
 
 ### Backend Deployment
@@ -187,15 +187,15 @@ aws cloudfront create-invalidation --distribution-id ENM5YUS3HN3KM --paths "/*"
 - `AWS_REGION` - AWS region for Lambda deployment
 
 ### Current Deployment
-- **CloudFront URL**: https://d1maiuvpso2xsv.cloudfront.net
-- **S3 Bucket**: snake-identifier-pwa-1761012570
-- **Lambda Function URL**: https://42znlandtww7wnpuarx5dy2rt40kajds.lambda-url.us-east-1.on.aws/
-- **CloudFront Distribution ID**: ENM5YUS3HN3KM
+- **CloudFront URL**: Set via deployment scripts
+- **S3 Bucket**: Set via `S3_BUCKET_NAME` environment variable
+- **Lambda Function URL**: Set via `NEXT_PUBLIC_LAMBDA_URL` environment variable
+- **CloudFront Distribution ID**: Set via `CLOUDFRONT_DISTRIBUTION_ID` environment variable
 
 ### Lambda Function URL
-The app is currently configured to use:
+The app reads the Lambda endpoint from the `NEXT_PUBLIC_LAMBDA_URL` environment variable:
 ```typescript
-const response = await fetch('https://42znlandtww7wnpuarx5dy2rt40kajds.lambda-url.us-east-1.on.aws/', {
+const response = await fetch(process.env.NEXT_PUBLIC_LAMBDA_URL!, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ image: imageData.split(',')[1] })
