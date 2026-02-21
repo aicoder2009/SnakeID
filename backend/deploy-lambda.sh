@@ -1,11 +1,7 @@
 #!/bin/bash
 
-# Ensure OPENAI_API_KEY is set in the environment (do NOT hardcode it here)
-if [ -z "$OPENAI_API_KEY" ]; then
-  echo "Error: OPENAI_API_KEY environment variable is not set."
-  echo "Export it before running this script: export OPENAI_API_KEY=your-key"
-  exit 1
-fi
+# Set OpenAI API Key (replace with your actual key)
+export OPENAI_API_KEY="your-openai-api-key-here"
 
 # Create deployment package
 cd lambda

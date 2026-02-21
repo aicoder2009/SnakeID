@@ -33,7 +33,7 @@ export default function Home() {
   const identifySnake = async (imageData: string) => {
     setLoading(true)
     try {
-      const response = await fetch(process.env.NEXT_PUBLIC_LAMBDA_URL!, {
+      const response = await fetch('https://42znlandtww7wnpuarx5dy2rt40kajds.lambda-url.us-east-1.on.aws/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageData.split(',')[1] })
